@@ -304,6 +304,13 @@ p { margin: 0; }
   .topbar { max-width: 720px; }
 }
 /* Big monitors: scale everything up so text and cards are comfortable to read. */
-@media (min-width: 1500px) { #app:has(> .tabs) { zoom: 1.25; } .fab { zoom: 1.25; } }
-@media (min-width: 2200px) { #app:has(> .tabs) { zoom: 1.5; } .fab { zoom: 1.5; } }
+@media (min-width: 1500px) { #app { zoom: 1.25; } .fab { zoom: 1.25; } }
+@media (min-width: 2200px) { #app { zoom: 1.5; } .fab { zoom: 1.5; } }
 .page.wide > .pad { padding-top: 14px; }
+
+/* ---------- More page: big cards ---------- */
+.bigcard { flex-direction: row; align-items: center; gap: 16px; padding: 20px 18px; }
+.bigcard:active { background: var(--variant); }
+.bigicon { width: 60px; height: 60px; border-radius: 50%; background: var(--primary-c); display: grid; place-items: center; font-size: 28px; flex: none; }
+.chev { font-size: 28px; color: var(--outline); }
+@media (min-width: 900px) { .page.more { max-width: 920px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; } .page.more .bigcard { padding: 26px 22px; } }
