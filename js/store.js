@@ -20,6 +20,9 @@ export const INCOME_SEED = ['Salary', "Gam'eya payout", 'Borrowed', 'Loan repaid
 const DEFAULT_SETTINGS = {
   onboarded: false, cycleStart: 1, baseCurrency: 'EGP', salary: 0, salaryDay: 1, salaryWallet: 0,
   savingsPerMonth: 0, budgetAlert: true, rates: {}, lastCategory: 0, lastWallet: 0, pinHash: '', pinSalt: '', overAlert: '',
+  // 1.3: look, savings goal, today's rates from the internet (your own rates still win)
+  theme: 'AUTO', goalName: '', goalAmount: 0, goalSaved: 0,
+  autoRates: true, autoCurrencies: ['USD', 'EUR', 'SAR'], onlineRates: {}, prevOnlineRates: {}, gold: {}, prevGold: {}, ratesUpdated: '', ratesFetchedAt: 0,
 };
 
 function empty() {
@@ -85,8 +88,35 @@ let lastId = 0;
 export const nextId = () => (lastId = Math.max(lastId + 1, Date.now() * 1000 + Math.floor(Math.random() * 1000)));
 export const S = () => data.settings;
 export function setSetting(k, v) { data.settings[k] = v; changed(); }
-export const rateOf = (cur) => cur === S().baseCurrency ? 1 : (S().rates[cur] || 1);
-export const currencies = () => [S().baseCurrency, ...Object.keys(S().rates).sort()];
+export const rateOf = (cur) => cur === S().baseCurrency ? 1 : (S().rates[cur] || (S().autoRates ? S().onlineRates[cur] : 0) || 1);
+export const currencies = () => [...new Set([S().baseCurrency, ...Object.keys(S().rates).sort(),
+  ...(S().autoRates ? S().autoCurrencies.filter((c) => S().onlineRates[c]) : [])])];
+export const isManual = (cur) => !!S().rates[cur];
+/** Change since yesterday as a fraction (0.01 = up 1%), or null when yesterday is not known. */
+export function rateChange(cur) { const n = S().onlineRates[cur], b = S().prevOnlineRates[cur]; return n && b ? (n - b) / b : null; }
+export function goldChange(k) { const n = S().gold[k], b = S().prevGold[k]; return n && b ? (n - b) / b : null; }
+
+// ---------- Today's rates and gold (a small file the project publishes every day) ----------
+
+const RATES_URL = 'https://raw.githubusercontent.com/architectahmedgaber-sys/pocketta/rates/rates.json';
+const readMap = (o) => { const out = {}; for (const [k, v] of Object.entries(o || {})) if (v > 0) out[k.toUpperCase()] = +v; return out; };
+export async function refreshRates(force = false) {
+  const s = S();
+  if (!s.autoRates) return false;
+  if (!force && Date.now() - s.ratesFetchedAt < 6 * 3600000) return true;
+  try {
+    const res = await fetch(RATES_URL, { cache: 'no-cache' });
+    if (!res.ok) throw new Error(res.status);
+    const j = await res.json();
+    const rates = readMap(j.rates), gold = readMap(j.gold);
+    if (!Object.keys(rates).length) throw new Error('empty');
+    if (j.previous) { s.prevOnlineRates = readMap(j.previous.rates); s.prevGold = readMap(j.previous.gold); }
+    else if (Object.keys(s.onlineRates).length && String(s.ratesUpdated).slice(0, 10) !== String(j.updated).slice(0, 10)) { s.prevOnlineRates = s.onlineRates; s.prevGold = s.gold; }
+    s.onlineRates = rates; s.gold = gold; s.ratesUpdated = String(j.updated || ''); s.ratesFetchedAt = Date.now();
+    changed();
+    return true;
+  } catch (e) { return false; }
+}
 export const base = (t) => t.amount * (t.rate || 1);
 
 // ---------- Backup ----------
@@ -189,6 +219,42 @@ export function guessCategory(note, type) {
     const cn = c.name.toLowerCase();
     return words.some((w) => cn === w || cn.startsWith(w) || w.startsWith(cn));
   })?.id ?? null;
+}
+
+/** Saves an expense typed as a sentence ("koshary 60"): category from the words, else the last one used. */
+export function quickExpense(note, amount, daysAgo = 0) {
+  const cat = guessCategory(note, 'EXPENSE') || S().lastCategory || null;
+  const t = txn({ type: 'EXPENSE', amount, walletId: defaultWallet(), categoryId: cat, note: note.trim(), epochDay: C.todayEpoch() - daysAgo });
+  data.txns.push(t);
+  changed();
+  return t;
+}
+
+/** Expenses you type again and again, so they can be added with one tap. */
+export function suggestions(today = C.todayEpoch()) {
+  const groups = new Map();
+  for (const t of data.txns) {
+    if (t.type !== 'EXPENSE' || t.source || !t.note.trim() || t.currency !== S().baseCurrency || t.epochDay < today - 60 || t.epochDay > today) continue;
+    const k = `${t.note.trim().toLowerCase()}|${t.amount}`;
+    const g = groups.get(k) || { note: t.note.trim(), amount: t.amount, n: 0 };
+    g.n++; groups.set(k, g);
+  }
+  return [...groups.values()].filter((g) => g.n >= 2).sort((a, b) => b.n - a.n).slice(0, 4);
+}
+
+/** The last 7 days against the 7 before, for the Friday/Saturday card. */
+export function week(today, dayReference) {
+  const from = today - 6;
+  const ex = (a, b) => data.txns.filter((t) => t.type === 'EXPENSE' && !t.spread && t.epochDay >= a && t.epochDay < b);
+  const now = ex(from, today + 1), before = ex(from - 7, from);
+  const top = {};
+  for (const t of now) { const c = byId(data.categories, t.categoryId); if (!c) continue; const p = c.parentId ? byId(data.categories, c.parentId) : c; top[p.name] = (top[p.name] || 0) + base(t); }
+  const perDay = {};
+  for (const t of now) perDay[t.epochDay] = (perDay[t.epochDay] || 0) + base(t);
+  let under = 0;
+  if (dayReference > 0) for (let d = from; d <= today; d++) if ((perDay[d] || 0) <= dayReference) under++;
+  const best = Object.entries(top).sort((a, b) => b[1] - a[1])[0];
+  return { spent: now.reduce((a, t) => a + base(t), 0), previous: before.reduce((a, t) => a + base(t), 0), topCategory: best ? best[0] : null, daysUnder: under };
 }
 
 // ---------- Bills ----------

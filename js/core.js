@@ -179,6 +179,14 @@ export function parseQuick(input) {
     .replace(/(^|\s)(EGP|egp|LE|le|L\.E\.?|جنيه|ج\.?م?)$/u, '').trim();
   return { amount, note };
 }
+const YESTERDAY = /(^|[^\p{L}])(yesterday|أمس|امس|امبارح|إمبارح)(?![\p{L}])/iu;
+const TODAYW = /(^|[^\p{L}])(today|النهارده|النهاردة|اليوم)(?![\p{L}])/iu;
+/** Like parseQuick, and also understands a day word: "yesterday taxi 85". daysAgo is 1 for yesterday. */
+export function parseQuickDay(input) {
+  if (YESTERDAY.test(input)) return { ...parseQuick(input.replace(YESTERDAY, ' ')), daysAgo: 1 };
+  if (TODAYW.test(input)) return { ...parseQuick(input.replace(TODAYW, ' ')), daysAgo: 0 };
+  return { ...parseQuick(input), daysAgo: 0 };
+}
 export function parseNumber(s) {
   if (s == null) return null;
   const t = normalizeDigits(String(s)).replace(/\s/g, '');
