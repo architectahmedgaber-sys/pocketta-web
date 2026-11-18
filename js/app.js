@@ -129,7 +129,7 @@ function render() {
   const pages = { home, spend, commit, more, add, income, wallets, categories, currencyPage, settings };
   const page = pages[c.r === 'currencies' ? 'currencyPage' : c.r] || home;
   if (isTab(c.r)) {
-    app.innerHTML = `<main class="page">${page(c)}</main>
+    app.innerHTML = `<main class="page wide">${page(c)}</main>
       <nav class="tabs">${TABS.map(([r, l]) => `<button class="tab ${c.r === r ? 'on' : ''}" data-act="tab" data-r="${r}"><span class="ti">${icon(r)}</span><span>${l}</span></button>`).join('')}</nav>`;
   } else {
     app.innerHTML = page(c);
