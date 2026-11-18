@@ -273,7 +273,7 @@ p { margin: 0; }
 .bar.grey i { background: var(--outline); }
 @media (max-width: 380px) { .donut { width: 120px; height: 120px; } .donut svg { width: 120px; height: 120px; } }
 
-/* ---------- Laptop / big screen: side menu and a wide, multi-column page ---------- */
+/* ---------- Laptop / big screen: side menu and a wide, two-column page ---------- */
 @media (min-width: 900px) {
   .tabs {
     left: 0; right: auto; top: 0; bottom: 0; width: 220px; flex-direction: column; justify-content: flex-start; gap: 6px;
@@ -283,19 +283,18 @@ p { margin: 0; }
   .tab .ti { width: 48px; height: 36px; }
   .tab:hover .ti { background: var(--variant); }
   .tab.on .ti { background: var(--primary-c); }
-  .tab::before { content: none; }
-  .page.wide {
-    max-width: 1160px; margin: 0 0 0 220px; padding: 28px 40px 48px;
-    display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start;
-  }
-  @media (min-width: 1500px) { .page.wide { margin: 0 auto; padding-left: 260px; max-width: 1380px; } }
-  .page.wide > * { grid-column: 1 / -1; }
-  .page.wide > .card { grid-column: auto; }
-  .page.wide > .card.hero, .page.wide > .two, .page.wide > .month-nav, .page.wide > .card.primary-c { grid-column: 1 / -1; }
-  .page.wide > .hero .hero-n { font-size: 64px; }
+  #app:has(> .tabs) { padding-left: 220px; }
+  /* Cards flow into two balanced columns (no gaps); titles, big numbers and lists span both. */
+  .page.wide { max-width: 1180px; margin: 0 auto; padding: 28px 40px 56px; display: block; column-count: 2; column-gap: 20px; }
+  .page.wide > * { break-inside: avoid; margin-bottom: 18px; }
+  .page.wide > .card.hero, .page.wide > .two, .page.wide > .month-nav, .page.wide > .head, .page.wide > .title,
+  .page.wide > .subtabs, .page.wide > .pad, .page.wide > #spend-list, .page.wide > .btn, .page.wide > .row, .page.wide > .empty,
+  .page.wide > .day-h, .page.wide > div:not(.card):not(.two):not(.month-nav):not(.head) { column-span: all; }
+  .page.wide > .card.hero .hero-n { font-size: 64px; }
   .page.wide > .spacer { display: none; }
+  .page.wide .card { padding: 20px; }
   .fab { right: 40px; bottom: 32px; }
-  .subtabs { margin: 0; position: static; }
+  .subtabs { margin: 0 0 8px; position: static; }
   .page > .subtabs:first-child { margin-top: 0; }
   #toast { bottom: 40px; }
   .scrim { align-items: center; }
@@ -304,3 +303,7 @@ p { margin: 0; }
   .page:not(.wide):not(.onboard) { max-width: 720px; }
   .topbar { max-width: 720px; }
 }
+/* Big monitors: scale everything up so text and cards are comfortable to read. */
+@media (min-width: 1500px) { #app:has(> .tabs) { zoom: 1.25; } .fab { zoom: 1.25; } }
+@media (min-width: 2200px) { #app:has(> .tabs) { zoom: 1.5; } .fab { zoom: 1.5; } }
+.page.wide > .pad { padding-top: 14px; }
