@@ -4,7 +4,7 @@ import { shareMonth } from './share.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const VERSION = '1.3.0';
+const VERSION = '1.3.1';
 
 const ICON = {
   home: 'M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z',
@@ -34,7 +34,7 @@ const ui = {
   details: false, quickText: '', quickHint: false, quickSaved: null, heroShown: 0, hideGuide: false,
   conv: { amount: '1', from: 'USD', to: '' },
   locked: false, hiddenAt: 0,
-  hideInstall: false,
+  hideInstall: false, updateReady: false,
 };
 try { ui.hideInstall = localStorage.getItem('pocketta-hide-install') === '1'; ui.hideGuide = localStorage.getItem('pocketta-hide-guide') === '1'; } catch { /* private mode */ }
 const cur = () => ui.stack[ui.stack.length - 1];
@@ -169,6 +169,10 @@ function home() {
   let html = `<div class="head"><div class="grow"><h1 class="title">${C.fmtMonth(s.cycle.end)}</h1><div class="small">${b.daysLeft} days left in this month</div></div>
     <button class="icon-btn emoji" data-act="toggle-theme" aria-label="Night mode">${isDark() ? '☀️' : '🌙'}</button>
     <button class="icon-btn" data-act="open" data-r="more" aria-label="Settings and more">${icon('settings')}</button></div>`;
+  if (ui.updateReady) {
+    html += card(`<div class="row-flex"><div class="grow"><b>A new version of Pocketta is ready</b><div class="small">Tap Update to get it. Your data stays as it is.</div></div>
+      <button class="btn filled" data-act="apply-update">Update</button></div>`, 'tonal');
+  }
   if (ios && !ui.hideInstall) {
     html += card(`<div class="row-flex"><div class="grow"><b>Put Pocketta on your home screen</b><div class="small">In Safari tap ${icon('share', 16)} Share, then <b>Add to Home Screen</b>. It then opens like an app and works offline.</div></div>
       <button class="btn text" data-act="hide-install">OK</button></div>`, 'tonal');
@@ -866,12 +870,14 @@ function loanDialog(l) {
 // ---------- More ----------
 
 function more() {
-  return topbar('Settings & more') + `<main class="page">` +
-    row('Income & salary', 'Your monthly salary, other income, money set aside', { icon: 'I', act: 'open', data: 'data-r="income"' }) +
-    row('Wallets', 'Cash, bank, Vodafone Cash, cards and balances', { icon: 'W', act: 'open', data: 'data-r="wallets"' }) +
-    row('Categories', 'Categories, sub-categories and monthly limits', { icon: 'C', act: 'open', data: 'data-r="categories"' }) +
-    row('Currencies & gold', "Convert money and gold, today's prices, your own rates", { icon: '$', act: 'open', data: 'data-r="currencies"' }) +
-    row('Settings', 'Month start, look, savings goal, PIN lock, backup', { icon: 'S', act: 'open', data: 'data-r="settings"' }) + `</main>`;
+  const big = (emoji, title, sub, r) => `<div class="card bigcard tap" data-act="open" data-r="${r}"><span class="bigicon">${emoji}</span>
+    <div class="grow"><div class="mid">${esc(title)}</div><div class="small">${esc(sub)}</div></div><span class="chev">›</span></div>`;
+  return topbar('Settings & more') + `<main class="page more">` +
+    big('💰', 'Income & salary', 'Your monthly salary, other income, money set aside', 'income') +
+    big('👛', 'Wallets', 'Cash, bank, Vodafone Cash, cards and balances', 'wallets') +
+    big('🏷️', 'Categories', 'Categories, sub-categories and monthly limits', 'categories') +
+    big('💱', 'Currencies & gold', "Convert money and gold, today's prices, your own rates", 'currencies') +
+    big('⚙️', 'Settings', 'Month start, look, savings goal, PIN lock, backup', 'settings') + `</main>`;
 }
 
 function income() {
@@ -1091,6 +1097,7 @@ const actions = {
   back: () => back(),
   'hide-install': () => { ui.hideInstall = true; try { localStorage.setItem('pocketta-hide-install', '1'); } catch { /* fine */ } render(); },
   'toggle-theme': () => R.setSetting('theme', isDark() ? 'LIGHT' : 'DARK'),
+  'apply-update': () => location.reload(),
   'toggle-details': () => { ui.details = !ui.details; render(); },
   'hide-guide': () => { ui.hideGuide = true; try { localStorage.setItem('pocketta-hide-guide', '1'); } catch { /* fine */ } render(); },
   'qa-add': () => quickSubmit(),
@@ -1261,5 +1268,15 @@ R.onChange(() => { if (cur().r !== 'add') render(); });
   ui.locked = !!R.S().pinHash;
   render();
   R.refreshRates();
-  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('./sw.js').catch(() => {});
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    // A new version installs in the background; when it takes over, say so and offer the update.
+    const had = !!navigator.serviceWorker.controller;
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (had) { ui.updateReady = true; if (!ui.locked) render(); toast('A new version is ready. Tap Update on Today.', 6000); } });
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      const check = () => reg.update().catch(() => {});
+      check();
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+      setInterval(check, 30 * 60 * 1000);
+    }).catch(() => {});
+  }
 })();
